@@ -52,25 +52,30 @@ else:
 
 # === PROXY LOADER ===
 PROXIES = []
+
 def load_proxies():
     sources = [
         "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt",
         "https://raw.githubusercontent.com/clarketm/proxy-list/master/proxy-list-raw.txt",
         "https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/http.txt",
-        "https://raw.githubusercontent.com/opsxcq/proxy-list/master/list.txt"
+        "https://raw.githubusercontent.com/opsxcq/proxy-list/master/list.txt",
+        "https://www.proxy-list.download/api/v1/get?type=http",
+        "https://openproxy.space/list/http",
+        "https://multiproxy.org/txt_all/proxy.txt"
     ]
     print("🌐 Mengambil proxy...")
     for url in sources:
         try:
             r = requests.get(url, timeout=10)
             for p in r.text.splitlines():
-                if ":" in p:
+                if re.match(r"\d+\.\d+\.\d+\.\d+:\d+", p.strip()):
                     PROXIES.append(p.strip())
-        except:
-            continue
-    print(f"✅ Total proxy dimuat: {len(PROXIES)}")
+        except Exception as e:
+            print(f"⚠️ Gagal ambil dari {url}: {e}")
 
-    # Validasi proxy (opsional)
+    print(f"🔎 Total proxy ditemukan: {len(PROXIES)}")
+
+    # Validasi proxy
     validated = []
     print("🔍 Validasi proxy...")
     for p in PROXIES:
@@ -79,10 +84,11 @@ def load_proxies():
             if r.status_code == 200:
                 validated.append(p)
         except:
-            pass
+            continue
+
     PROXIES.clear()
     PROXIES.extend(validated)
-    print(f"✅ Proxy tervalidasi: {len(PROXIES)}")
+    print(f"✅ Proxy tervalidasi & siap pakai: {len(PROXIES)}")
 
 if USE_PROXY:
     load_proxies()
