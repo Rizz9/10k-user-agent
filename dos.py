@@ -36,7 +36,7 @@ if not os.path.exists(ua_file):
     try:
         import urllib.request
         urllib.request.urlretrieve(
-            "https://raw.githubusercontent.com/Rizz9/10k-user-agent/main/10k-user-agent.txt", ua_file
+            "https://raw.githubusercontent.com/Rizz9/10k-user-agent/refs/heads/main/user_agents.txt", ua_file
         )
         print("✅ Berhasil download 10k-user-agent.txt")
     except Exception as e:
