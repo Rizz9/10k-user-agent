@@ -1,4 +1,4 @@
-import requests, httpx, threading, random, string, time, socket, os, ssl, re
+jimport requests, httpx, threading, random, string, time, socket, os, ssl, re
 from tls_client import Session
 from websocket import create_connection
 from urllib.parse import urlparse
@@ -48,10 +48,7 @@ else:
 PROXIES = []
 def load_proxies():
     sources = [
-        "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt",
-        "https://raw.githubusercontent.com/clarketm/proxy-list/master/proxy-list-raw.txt",
-        "https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/http.txt",
-        "https://raw.githubusercontent.com/opsxcq/proxy-list/master/list.txt",
+      
         "https://www.proxy-list.download/api/v1/get?type=http",
         "https://openproxy.space/list/http",
         "https://multiproxy.org/txt_all/proxy.txt"
